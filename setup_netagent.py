@@ -390,19 +390,29 @@ virustotal:
 def install_dependencies():
     print("\n--- 2. Installing NetAgent Package & Dependencies ---")
     python_exe = sys.executable
-    run_cmd([python_exe, "-m", "pip", "install", "--upgrade", "pip"], "Upgrading pip")
-    run_cmd([python_exe, "-m", "pip", "install", "--no-build-isolation", "-e", "."], "Installing NetAgent in editable mode")
+    run_cmd([python_exe, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], "Upgrading pip, setuptools & wheel")
+    run_cmd([python_exe, "-m", "pip", "install", "-e", "."], "Installing NetAgent in editable mode")
 
 
 def configure_powershell_path():
-    print("\n--- 3. Configuring Global PowerShell 'netagent' Command ---")
-    python_dir = os.path.dirname(sys.executable)
-    scripts_dir = os.path.join(python_dir, "Scripts")
+    print("\n--- 3. Configuring Global 'netagent' Command & PATH ---")
+    import sysconfig
+    scripts_dir = sysconfig.get_path("scripts")
     if not os.path.isdir(scripts_dir):
-        # Alternative virtualenv layout
-        scripts_dir = os.path.join(os.path.dirname(python_dir), "Scripts")
+        python_dir = os.path.dirname(sys.executable)
+        candidates = [
+            os.path.join(python_dir, "Scripts"),
+            os.path.join(python_dir, "bin"),
+            python_dir,
+            os.path.join(os.path.dirname(python_dir), "Scripts"),
+            os.path.join(os.path.dirname(python_dir), "bin"),
+        ]
+        for c in candidates:
+            if os.path.isdir(c):
+                scripts_dir = c
+                break
 
-    print(f"[*] Python Scripts directory: {scripts_dir}")
+    print(f"[*] Python Scripts/bin directory: {scripts_dir}")
 
     # Check if scripts_dir is in PATH
     path_env = os.environ.get("PATH", "")
@@ -419,14 +429,17 @@ def configure_powershell_path():
                 print(f"    [+] Added {scripts_dir} to User PATH in Windows registry.")
             except Exception as e:
                 print(f"    [-] Could not update registry PATH: {e}")
+        else:
+            print(f"    [!] Note: Ensure {scripts_dir} is in your PATH (e.g., in ~/.bashrc or ~/.zshrc).")
     else:
-        print("    [+] Python Scripts directory is already in PATH.")
+        print("    [+] Python Scripts/bin directory is already in PATH.")
 
-    # Also create netagent.cmd and netagent.ps1 in ~/.netagent/bin
+    # Also create netagent shims in ~/.netagent/bin (cross-platform)
     user_bin = Path.home() / ".netagent" / "bin"
     user_bin.mkdir(parents=True, exist_ok=True)
     cmd_script = user_bin / "netagent.cmd"
     ps_script = user_bin / "netagent.ps1"
+    sh_script = user_bin / "netagent"
 
     python_run = sys.executable
     with open(cmd_script, "w", encoding="utf-8") as fh:
@@ -434,6 +447,13 @@ def configure_powershell_path():
 
     with open(ps_script, "w", encoding="utf-8") as fh:
         fh.write(f'& "{python_run}" -m wireshark_mcp.cli $args\n')
+
+    with open(sh_script, "w", encoding="utf-8") as fh:
+        fh.write(f'#!/usr/bin/env bash\nexec "{python_run}" -m wireshark_mcp.cli "$@"\n')
+    try:
+        sh_script.chmod(0o755)
+    except Exception:
+        pass
 
     print(f"    [+] Created global execution shims at {user_bin}")
 
@@ -468,10 +488,11 @@ def initialize_directories_and_auth():
     base_dir = os.path.join(tempfile.gettempdir(), "wireshark_mcp_captures")
     try:
         os.makedirs(base_dir, exist_ok=True)
+        os.makedirs(os.path.join(base_dir, "memory"), exist_ok=True)
     except Exception:
         pass
 
-    # Auto-authorize capture marker in both locations
+    # Auto-authorize capture marker in all locations
     for d in [DEFAULT_CAPTURE_DIR, DEFAULT_DATA_DIR, base_dir]:
         try:
             auth_marker = os.path.join(d, ".authorized")
@@ -482,28 +503,33 @@ def initialize_directories_and_auth():
     print("    [+] Live packet capture permission pre-authorized.")
 
     # Pre-populate long-term memory with baseline network knowledge
-    mem_file = os.path.join(base_dir, "memory", "long_term_memory.json")
-    if not os.path.isfile(mem_file):
-        seed_memories = [
-            {
-                "entry_id": "mem_seed01",
-                "category": "topology",
-                "content": "Standard private subnets: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16. Multicast: 224.0.0.0/4.",
-                "created_at": "2026-01-01 00:00:00",
-                "source": "system",
-            },
-            {
-                "entry_id": "mem_seed02",
-                "category": "preference",
-                "content": "Default live capture duration is 15 seconds. Use tshark or PowerShell for interface enumeration.",
-                "created_at": "2026-01-01 00:00:00",
-                "source": "system",
-            }
-        ]
-        import json
-        with open(mem_file, "w", encoding="utf-8") as fh:
-            json.dump(seed_memories, fh, indent=2)
-        print("    [+] Long-term network memory seeded with baseline topology rules.")
+    seed_memories = [
+        {
+            "entry_id": "mem_seed01",
+            "category": "topology",
+            "content": "Standard private subnets: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16. Multicast: 224.0.0.0/4.",
+            "created_at": "2026-01-01 00:00:00",
+            "source": "system",
+        },
+        {
+            "entry_id": "mem_seed02",
+            "category": "preference",
+            "content": "Default live capture duration is 15 seconds. Use tshark or PowerShell for interface enumeration.",
+            "created_at": "2026-01-01 00:00:00",
+            "source": "system",
+        }
+    ]
+    import json
+    for target_dir in [os.path.join(DEFAULT_DATA_DIR, "memory"), os.path.join(base_dir, "memory")]:
+        try:
+            os.makedirs(target_dir, exist_ok=True)
+            mem_file = os.path.join(target_dir, "long_term_memory.json")
+            if not os.path.isfile(mem_file):
+                with open(mem_file, "w", encoding="utf-8") as fh:
+                    json.dump(seed_memories, fh, indent=2)
+        except Exception:
+            pass
+    print("    [+] Long-term network memory seeded with baseline topology rules.")
 
 
 def verify_installation():
