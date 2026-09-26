@@ -228,10 +228,11 @@ Open PowerShell as Administrator and run:
 
 ```powershell
 # 1. Clone repository and navigate to folder
-cd C:\Users\KIIT\ollama-wireshark-mcp-v2
+git clone https://github.com/ScriptKiddie913/NetAgent.git
+cd NetAgent
 
 # 2. Run one-click setup script (auto-detects and installs Wireshark, Nmap, dependencies & registers global command)
-python setup_netagent.py --api-key YOUR_SARVAM_API_KEY --telegram-token YOUR_BOT_TOKEN --telegram-chat-id YOUR_CHAT_ID --virustotal-key YOUR_VT_KEY
+python setup_netagent.py 
 
 # 3. Launch NetAgent from ANY PowerShell window
 netagent
@@ -245,17 +246,13 @@ Open a terminal and run:
 
 ```bash
 # 1. Clone repository and navigate to folder
-cd ~/ollama-wireshark-mcp-v2
+git clone https://github.com/ScriptKiddie913/NetAgent.git
+cd NetAgent
 
 # 2. Create virtual environment and run setup
-python3 -m venv venv
-source venv/bin/activate
-python3 setup_netagent.py --api-key YOUR_SARVAM_API_KEY --telegram-token YOUR_BOT_TOKEN --telegram-chat-id YOUR_CHAT_ID --virustotal-key YOUR_VT_KEY
+python3 setup_netagent.py 
 
-# 3. Create global symlink (optional)
-sudo ln -sf $(pwd)/venv/bin/netagent /usr/local/bin/netagent
-
-# 4. Launch NetAgent
+# 3. Launch NetAgent
 netagent
 ```
 
