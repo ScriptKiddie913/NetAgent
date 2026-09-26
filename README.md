@@ -422,38 +422,6 @@ Use slash commands inside the interactive `netagent` chat:
 
 ---
 
-## ⚡ Directory Structure
-
-```text
-ollama-wireshark-mcp-v2/
-├── capture/                  # Project-level packet capture storage
-│   ├── .authorized           # Pre-authorized capture token
-│   └── *.pcap                # Live captures and ring buffers
-├── data/                     # Analytical output & persistent storage
-│   ├── reports/              # Generated markdown threat reports
-│   ├── sandbox/              # Quarantined external pcaps
-│   ├── scans/                # Host and port scan ledger
-│   ├── sessions/             # Saved chat sessions and context
-│   ├── memory/               # Long-term network memory ledger
-│   ├── extracted/            # HTTP objects, TLS certs, payload files
-│   └── monitors/             # Detached background subagent registry
-├── wireshark_mcp/            # Core NetAgent package
-│   ├── cli.py                # Command-line interface and chat runner
-│   ├── server.py             # MCP server with 30+ tshark analysis tools
-│   ├── agents.py             # Multi-agent orchestrator & supervisor
-│   ├── virustotal.py         # VirusTotal API v3 threat intelligence
-│   ├── telegram.py           # 2-way Telegram BotFather integration
-│   ├── scanner.py            # Nmap & socket port auditing engine
-│   ├── memory.py             # Persistent memory management
-│   ├── session.py            # Session serialization & restoration
-│   ├── sandbox.py            # Quarantine sandbox staging
-│   └── config.py             # Paths, models, and security configuration
-├── config.yaml               # Active workspace configuration
-├── pyproject.toml            # Project packaging specification
-├── requirements.txt          # Python dependencies
-└── setup_netagent.py         # One-click installer & dependency resolver
-```
-
 ---
 
 ## ⚡ Security & Privacy Statement
