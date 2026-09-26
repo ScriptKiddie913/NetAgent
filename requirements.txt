@@ -1,0 +1,8 @@
+mcp<2
+ollama>=0.4.0
+httpx>=0.24.0
+questionary>=2.0.0
+prompt_toolkit>=3.0.0
+click>=8.1
+rich>=13.7
+PyYAML>=6.0

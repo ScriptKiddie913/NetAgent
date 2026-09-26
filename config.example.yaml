@@ -1,0 +1,48 @@
+# Copy to config.yaml (or ~/.config/wireshark_mcp/config.yaml) and edit as needed.
+# Anything you don't set here falls back to the built-in defaults; env vars
+# (WSMCP_*) override everything below. See README.md for the full list.
+
+# AI Model Provider: "ollama" (local offline models) or "sarvam" (Sarvam AI cloud API models)
+provider: ollama
+
+tshark_path: tshark          # or full path, e.g. C:\Program Files\Wireshark\tshark.exe (auto-detected on Windows)
+capture_dir: null            # null = OS temp dir / wireshark_mcp_captures
+max_output_lines: 80
+default_capture_timeout: 60
+
+# Local Ollama Configuration
+ollama:
+  host: null                 # null = http://localhost:11434
+  supervisor_model: llama3.1:8b   # needs to be a solid function-calling model
+  agent_model: llama3.2:3b        # smaller/cheaper model for specialist agents
+  temperature: 0
+  num_predict: 700
+  keep_alive: 30m
+  max_tool_iterations: 8
+
+# Sarvam AI Configuration (API Key based cloud models)
+# Get your API subscription key from: https://dashboard.sarvam.ai
+sarvam:
+  api_key: null              # null = reads from SARVAM_API_KEY environment variable
+  base_url: https://api.sarvam.ai/v1
+  supervisor_model: sarvam-105b       # powerful reasoning & function-calling model
+  agent_model: sarvam-105b-conversations # or sarvam-105b / sarvam-2b
+  temperature: 0.1
+  max_tokens: 1000
+  max_tool_iterations: 8
+
+# Human-In-The-Loop User Decisions & Safety Gating
+decisions:
+  require_confirmation: true # Prompts the user before executing destructive/sensitive actions
+  sensitive_tools:
+    - delete_capture         # Permanently deletes a saved pcap/pcapng file
+    - cleanup_old_captures    # Mass deletes older captures based on retention
+    - stop_all_captures      # Terminates all running background capture processes
+    - start_ring_capture     # Continuous rotating capture writing multi-file buffers
+
+security:
+  allowed_interfaces: []     # e.g. ["Wi-Fi", "3"] to hard-restrict capture interfaces
+  require_authorization_ack: true
+
+retention:
+  max_age_hours: 168         # used by `wireshark-agent captures clean`

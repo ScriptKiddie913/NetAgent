@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "netagent": {
+      "command": "python",
+      "args": [
+        "-m",
+        "wireshark_mcp.server"
+      ],
+      "env": {
+        "SARVAM_API_KEY": "YOUR_SARVAM_API_KEY",
+        "VIRUSTOTAL_API_KEY": "YOUR_VIRUSTOTAL_API_KEY",
+        "TELEGRAM_BOT_TOKEN": "YOUR_TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID": "YOUR_TELEGRAM_CHAT_ID"
+      }
+    }
+  }
+}

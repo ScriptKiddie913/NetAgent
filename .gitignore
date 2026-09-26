@@ -1,0 +1,67 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Packet captures & sensitive forensics
+capture/*.pcap
+capture/*.pcapng
+capture/*.cap
+data/extracted/*
+!data/extracted/.gitkeep
+data/reports/*
+!data/reports/.gitkeep
+data/sandbox/*
+!data/sandbox/.gitkeep
+data/scans/*
+!data/scans/.gitkeep
+data/sessions/*
+!data/sessions/.gitkeep
+
+# Sensitive config & credentials
+config.yaml
+.env
+*.key
+*.pem
+data/monitors/*
+!data/monitors/.gitkeep
+data/subagents/*
+!data/subagents/.gitkeep
+data/memory/*
+!data/memory/.gitkeep
+!data/memory/long_term_memory.json

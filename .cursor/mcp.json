@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "netagent": {
+      "command": "python",
+      "args": [
+        "-m",
+        "wireshark_mcp.server"
+      ],
+      "env": {
+        "SARVAM_API_KEY": "sk_jy9jsv8o_3M0SikguraW5kCanbouLoox1",
+        "VIRUSTOTAL_API_KEY": "YOUR_VIRUSTOTAL_API_KEY"
+      }
+    }
+  }
+}

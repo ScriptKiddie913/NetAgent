@@ -1,0 +1,16 @@
+[
+  {
+    "entry_id": "mem_seed01",
+    "category": "topology",
+    "content": "Standard private subnets: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16. Multicast: 224.0.0.0/4.",
+    "created_at": "2026-01-01 00:00:00",
+    "source": "system"
+  },
+  {
+    "entry_id": "mem_seed02",
+    "category": "preference",
+    "content": "Default live capture duration is 15 seconds. Use tshark or PowerShell for interface enumeration.",
+    "created_at": "2026-01-01 00:00:00",
+    "source": "system"
+  }
+]
