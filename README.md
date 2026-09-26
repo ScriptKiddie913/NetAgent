@@ -250,6 +250,8 @@ git clone https://github.com/ScriptKiddie913/NetAgent.git
 cd NetAgent
 
 # 2. Create virtual environment and run setup
+python3 -m venv venv
+source venv/bin/activate
 python3 setup_netagent.py 
 
 # 3. Launch NetAgent
