@@ -1057,17 +1057,19 @@ async def _run_chat(
                         continue
 
                     elif cmd == "/adapters":
-                        console.print("[dim]Fetching network adapters via PowerShell (Get-NetAdapter)...[/dim]")
+                        via = "PowerShell (Get-NetAdapter)" if sys.platform == "win32" else "ip/ifconfig"
+                        console.print(f"[dim]Fetching network adapters via {via}...[/dim]")
                         res = await session.call_tool("powershell_adapters", {})
                         text = "\n".join(c.text for c in res.content if hasattr(c, "text"))
-                        console.print(Panel(text or "No adapters found", title="Network Adapters (PowerShell)", border_style="cyan"))
+                        console.print(Panel(text or "No adapters found", title=f"Network Adapters ({via})", border_style="cyan"))
                         continue
 
                     elif cmd == "/connections":
-                        console.print("[dim]Fetching established sockets via PowerShell (Get-NetTCPConnection)...[/dim]")
+                        via = "PowerShell (Get-NetTCPConnection)" if sys.platform == "win32" else "ss"
+                        console.print(f"[dim]Fetching established sockets via {via}...[/dim]")
                         res = await session.call_tool("powershell_network_connections", {"state": "Established"})
                         text = "\n".join(c.text for c in res.content if hasattr(c, "text"))
-                        console.print(Panel(text or "No active connections", title="Live TCP Connections (PowerShell)", border_style="cyan"))
+                        console.print(Panel(text or "No active connections", title=f"Live TCP Connections ({via})", border_style="cyan"))
                         continue
 
                     elif cmd == "/provider":

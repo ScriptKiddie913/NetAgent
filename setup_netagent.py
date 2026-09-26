@@ -89,6 +89,18 @@ def ensure_linux_network_stack() -> bool:
 
     print("    [*] Automatically pulling and installing complete network forensic & IP stack...")
 
+    # Warn early if sudo needs a password but we can't prompt for one (e.g. this
+    # script is being run non-interactively, piped, or in a CI/container shell).
+    # Without this, apt-get/setcap below fail silently and the user is left
+    # thinking "the installer ran fine" while tshark/nmap never actually installed.
+    if shutil.which("sudo"):
+        needs_pw = subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode != 0
+        if needs_pw and not sys.stdin.isatty():
+            print("    [!] sudo requires a password but this session has no interactive terminal.")
+            print("        Re-run this script from a normal terminal (not piped/non-interactive),")
+            print("        or install the packages manually, e.g.:")
+            print("          sudo apt-get install -y tshark wireshark nmap tcpdump")
+
     # Debian / Ubuntu / Kali / Mint / PopOS (APT)
     if shutil.which("apt-get"):
         print("    [*] Configuring debconf for automated non-interactive packet capture permissions...")
@@ -111,8 +123,25 @@ def ensure_linux_network_stack() -> bool:
         dumpcap_path = shutil.which("dumpcap") or "/usr/bin/dumpcap"
         if os.path.isfile(dumpcap_path):
             subprocess.run(["sudo", "chmod", "+x", dumpcap_path], capture_output=True)
-            subprocess.run(["sudo", "setcap", "CAP_NET_RAW+eip CAP_NET_ADMIN+eip", dumpcap_path], capture_output=True)
-            print("    [+] Configured non-root packet capture capabilities on dumpcap.")
+            # NOTE: setcap takes ONE comma-separated capability clause, not two
+            # space-separated ones (a space here is a malformed argv token and
+            # setcap silently fails to apply it, which used to leave dumpcap
+            # requiring root on every Linux install).
+            cap_res = subprocess.run(
+                ["sudo", "setcap", "cap_net_raw,cap_net_admin+eip", dumpcap_path],
+                capture_output=True, text=True,
+            )
+            if cap_res.returncode == 0:
+                print("    [+] Configured non-root packet capture capabilities on dumpcap.")
+            else:
+                print(f"    [-] Warning: setcap failed on {dumpcap_path}: {cap_res.stderr.strip()}")
+                print(f"        You can retry manually with:")
+                print(f"          sudo setcap cap_net_raw,cap_net_admin+eip {dumpcap_path}")
+
+        if user:
+            print("    [!] Added you to the 'wireshark' group for non-root capture access.")
+            print("        This only takes effect after you LOG OUT and back in (or run 'newgrp wireshark').")
+            print("        Until then, live captures will need sudo even though setcap succeeded.")
 
         return bool(shutil.which("tshark"))
 
@@ -517,6 +546,48 @@ def configure_powershell_path():
 
     print(f"    [+] Created global execution shims at {user_bin}")
 
+    # BUG FIX: the shim directory above was previously never added to PATH,
+    # so the `netagent` command only ever worked when pip's own Scripts/bin
+    # directory happened to already be on PATH. That's exactly the "netagent
+    # is not recognized" failure on a fresh PowerShell. Register user_bin too.
+    user_bin_str = str(user_bin)
+    if sys.platform == "win32":
+        try:
+            ps_cmd = (
+                f"$cur = [System.Environment]::GetEnvironmentVariable('Path', 'User'); "
+                f"if ($cur -notlike '*{user_bin_str}*') {{ "
+                f"[System.Environment]::SetEnvironmentVariable('Path', $cur + ';{user_bin_str}', 'User') "
+                f"}}"
+            )
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True)
+            print(f"    [+] Added {user_bin_str} to User PATH in Windows registry.")
+        except Exception as e:
+            print(f"    [-] Could not update registry PATH for shim dir: {e}")
+        # Also patch the *current* process's PATH so `netagent doctor` (run
+        # later in this same script) can find it without a new shell.
+        if user_bin_str.lower() not in os.environ.get("PATH", "").lower():
+            os.environ["PATH"] = user_bin_str + os.pathsep + os.environ.get("PATH", "")
+        print("    [!] IMPORTANT: close and reopen PowerShell (or run `refreshenv`/log out and back in)")
+        print("        before the `netagent` command will be recognized in NEW windows. PATH changes")
+        print("        made by an installer never apply to windows that were already open.")
+    else:
+        # POSIX: append to PATH for common shells so it survives new terminals,
+        # not just print a note the user has to act on manually.
+        os.environ["PATH"] = user_bin_str + os.pathsep + os.environ.get("PATH", "")
+        export_line = f'export PATH="{user_bin_str}:$PATH"'
+        marker = "# Added by NetAgent setup_netagent.py"
+        for rc_name in (".bashrc", ".zshrc", ".profile"):
+            rc_path = Path.home() / rc_name
+            try:
+                existing = rc_path.read_text(encoding="utf-8") if rc_path.is_file() else ""
+                if export_line not in existing:
+                    with open(rc_path, "a", encoding="utf-8") as fh:
+                        fh.write(f"\n{marker}\n{export_line}\n")
+            except Exception:
+                pass
+        print(f"    [+] Added {user_bin_str} to PATH in ~/.bashrc, ~/.zshrc and ~/.profile.")
+        print("    [!] Run `source ~/.bashrc` (or open a new terminal) before `netagent` is recognized there.")
+
 
 def initialize_directories_and_auth():
     print("\n--- 4. Initializing /capture, /data, Sandbox, Memory, Sessions & Monitors ---")
@@ -664,7 +735,11 @@ def main():
     print("\n" + "=" * 72)
     print("      [SUCCESS] NetAgent has been successfully installed and configured!      ")
     print("=" * 72)
-    print("\nYou can now run NetAgent from ANY PowerShell window with:")
+    if sys.platform == "win32":
+        print("\n[!] Open a NEW PowerShell window now (PATH changes never apply to windows")
+        print("    that were already open) — then you can run NetAgent from ANY window with:")
+    else:
+        print("\n[!] Run `source ~/.bashrc` or open a NEW terminal window, then run NetAgent with:")
     print("    netagent")
     print("or:")
     print("    netagent chat")

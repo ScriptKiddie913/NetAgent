@@ -228,12 +228,13 @@ Open PowerShell as Administrator and run:
 
 ```powershell
 # 1. Clone repository and navigate to folder
-cd C:\Users\KIIT\ollama-wireshark-mcp-v2
+cd C:\path\to\NetAgent-main
 
 # 2. Run one-click setup script (auto-detects and installs Wireshark, Nmap, dependencies & registers global command)
 python setup_netagent.py --api-key YOUR_SARVAM_API_KEY --telegram-token YOUR_BOT_TOKEN --telegram-chat-id YOUR_CHAT_ID --virustotal-key YOUR_VT_KEY
 
-# 3. Launch NetAgent from ANY PowerShell window
+# 3. Close this PowerShell window and open a NEW one (PATH changes never
+#    apply to a window that was already open), then run:
 netagent
 ```
 
@@ -245,7 +246,7 @@ NetAgent fully supports Linux environments for autonomous packet captures, live 
 
 #### Option A: One-Click Automated Setup (Recommended)
 
-The included [setup_netagent.py](file:///c:/Users/KIIT/ollama-wireshark-mcp-v2/setup_netagent.py) installer automatically detects your Linux distribution, installs missing tools (`tshark`, `wireshark`, `dumpcap`, `nmap`, `tcpdump`, `iproute2`, `psutil`), configures non-root packet capture permissions, sets up long-term memory, and registers global executable shims:
+The included `setup_netagent.py` installer automatically detects your Linux distribution, installs missing tools (`tshark`, `wireshark`, `dumpcap`, `nmap`, `tcpdump`, `iproute2`, `psutil`), configures non-root packet capture permissions, sets up long-term memory, and registers global executable shims:
 
 ```bash
 # 1. Clone repository and navigate to directory

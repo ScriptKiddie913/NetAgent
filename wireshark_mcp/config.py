@@ -23,12 +23,6 @@ def get_project_root() -> str:
     """Find the root directory for NetAgent data and capture files."""
     if os.environ.get("NETAGENT_DIR"):
         return os.environ["NETAGENT_DIR"]
-    for candidate in [
-        r"C:\Users\KIIT\ollama-wireshark-mcp-v2",
-        r"C:\Users\KIIT\Downloads\ollama-wireshark-mcp-v2",
-    ]:
-        if os.path.isdir(candidate):
-            return candidate
     cwd = os.getcwd()
     if os.path.isdir(os.path.join(cwd, "wireshark_mcp")) or os.path.isfile(os.path.join(cwd, "pyproject.toml")) or os.path.isdir(os.path.join(cwd, "data")):
         return cwd

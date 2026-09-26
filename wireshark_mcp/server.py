@@ -159,7 +159,8 @@ def open_in_wireshark(path: str, display_filter: str = "") -> str:
     if err:
         return err
     resolved_path = RUNNER.resolve_path(path)
-    gui_path = getattr(RUNNER.cfg, "wireshark_gui_path", r"C:\Program Files\Wireshark\Wireshark.exe")
+    default_gui = r"C:\Program Files\Wireshark\Wireshark.exe" if sys.platform == "win32" else "wireshark"
+    gui_path = getattr(RUNNER.cfg, "wireshark_gui_path", default_gui)
     resolved_bin = shutil.which(gui_path) or (gui_path if os.path.isfile(gui_path) else None)
     if not resolved_bin:
         return f"ERROR: Wireshark desktop application not found at '{gui_path}'. Ensure Wireshark is installed."
@@ -174,39 +175,108 @@ def open_in_wireshark(path: str, display_filter: str = "") -> str:
 @mcp.tool()
 @_err_guard
 def powershell_adapters() -> str:
-    """Get detailed Windows network adapter status, link speed, MAC address, and status via PowerShell Get-NetAdapter."""
-    ps_cmd = "Get-NetAdapter | Select-Object Name, InterfaceDescription, Status, LinkSpeed, MacAddress | Format-Table -AutoSize | Out-String -Width 120"
-    result = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, timeout=15)
-    return result.stdout.strip() or "No adapters found."
+    """Get network adapter status, link speed, and MAC address (PowerShell Get-NetAdapter on Windows; `ip`/`ifconfig` on Linux/macOS)."""
+    if sys.platform == "win32":
+        ps_cmd = "Get-NetAdapter | Select-Object Name, InterfaceDescription, Status, LinkSpeed, MacAddress | Format-Table -AutoSize | Out-String -Width 120"
+        result = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, timeout=15)
+        return result.stdout.strip() or "No adapters found."
+
+    # Linux / macOS fallback: no PowerShell available there, so this used to
+    # hard-fail with "FileNotFoundError: 'powershell'" every single call.
+    if shutil.which("ip"):
+        result = subprocess.run(["ip", "-br", "addr"], capture_output=True, text=True, timeout=15)
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    if shutil.which("ifconfig"):
+        result = subprocess.run(["ifconfig"], capture_output=True, text=True, timeout=15)
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    return "ERROR: neither 'ip' nor 'ifconfig' found; install iproute2 (e.g. `sudo apt-get install iproute2`)."
 
 
 @mcp.tool()
 @_err_guard
 def powershell_network_connections(state: str = "Established", port: int = 0) -> str:
-    """Inspect active TCP/UDP sockets with process IDs using Windows PowerShell (Get-NetTCPConnection)."""
-    filter_clause = []
-    if state:
-        filter_clause.append(f"-State '{state}'")
+    """Inspect active TCP/UDP sockets with process IDs (PowerShell Get-NetTCPConnection on Windows; `ss` on Linux/macOS)."""
+    if sys.platform == "win32":
+        filter_clause = []
+        if state:
+            filter_clause.append(f"-State '{state}'")
+        if port > 0:
+            filter_clause.append(f"-LocalPort {port}")
+        clause = " ".join(filter_clause)
+        ps_cmd = (
+            f"Get-NetTCPConnection {clause} | "
+            "Select-Object -First 40 LocalAddress, LocalPort, RemoteAddress, RemotePort, State, "
+            "@{Name='Process';Expression={(Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName}} | "
+            "Format-Table -AutoSize | Out-String -Width 120"
+        )
+        result = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, timeout=15)
+        return result.stdout.strip() or "No connections found matching filter."
+
+    # Linux / macOS fallback using `ss` (socket statistics), the modern
+    # replacement for netstat and available by default on Ubuntu.
+    ss_bin = shutil.which("ss")
+    if not ss_bin:
+        return "ERROR: 'ss' not found; install iproute2 (e.g. `sudo apt-get install iproute2`)."
+    ss_state = state.lower() if state else "established"
+    args = [ss_bin, "-tnp", "state", ss_state]
+    result = subprocess.run(args, capture_output=True, text=True, timeout=15)
+    lines = result.stdout.strip().splitlines()
     if port > 0:
-        filter_clause.append(f"-LocalPort {port}")
-    clause = " ".join(filter_clause)
-    ps_cmd = (
-        f"Get-NetTCPConnection {clause} | "
-        "Select-Object -First 40 LocalAddress, LocalPort, RemoteAddress, RemotePort, State, "
-        "@{Name='Process';Expression={(Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName}} | "
-        "Format-Table -AutoSize | Out-String -Width 120"
-    )
-    result = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, timeout=15)
-    return result.stdout.strip() or "No connections found matching filter."
+        lines = [lines[0]] + [ln for ln in lines[1:] if f":{port}" in ln] if lines else []
+    text = "\n".join(lines[:41])
+    if not text:
+        return "No connections found matching filter."
+    if "Permission denied" in (result.stderr or "") or not any("users:" in ln for ln in lines[1:]):
+        text += "\n\n[note] Run with sudo for process names/PIDs on each connection (ss needs root for that)."
+    return text
 
 
 @mcp.tool()
 @_err_guard
 def powershell_test_connection(target: str, port: int = 443) -> str:
-    """Test network connectivity, TCP handshake, and ping to target host/IP via PowerShell Test-NetConnection."""
-    ps_cmd = f"Test-NetConnection -ComputerName '{target}' -Port {port} -WarningAction SilentlyContinue | Format-List ComputerName, RemoteAddress, RemotePort, TcpTestSucceeded, PingSucceeded, RoundTripTime | Out-String"
-    result = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, timeout=20)
-    return result.stdout.strip() or "No result returned."
+    """Test network connectivity / TCP handshake to a target host:port (PowerShell Test-NetConnection on Windows; raw sockets on Linux/macOS)."""
+    if sys.platform == "win32":
+        ps_cmd = f"Test-NetConnection -ComputerName '{target}' -Port {port} -WarningAction SilentlyContinue | Format-List ComputerName, RemoteAddress, RemotePort, TcpTestSucceeded, PingSucceeded, RoundTripTime | Out-String"
+        result = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, timeout=20)
+        return result.stdout.strip() or "No result returned."
+
+    # Linux / macOS fallback: do the TCP handshake ourselves instead of
+    # shelling out to a Windows-only cmdlet that will never exist here.
+    import socket as _socket
+    import time as _time
+    resolved = None
+    try:
+        resolved = _socket.gethostbyname(target)
+    except Exception as e:
+        return f"ComputerName: {target}\nRemoteAddress: <could not resolve: {e}>\nTcpTestSucceeded: False"
+
+    start = _time.time()
+    succeeded = False
+    err = ""
+    try:
+        with _socket.create_connection((resolved, port), timeout=5) as s:
+            succeeded = True
+    except Exception as e:
+        err = str(e)
+    elapsed_ms = round((_time.time() - start) * 1000, 1)
+
+    ping_ok = False
+    if shutil.which("ping"):
+        ping_flag = "-n" if sys.platform == "win32" else "-c"
+        ping_res = subprocess.run(["ping", ping_flag, "1", "-W", "2", resolved], capture_output=True, text=True, timeout=5)
+        ping_ok = ping_res.returncode == 0
+
+    lines = [
+        f"ComputerName: {target}",
+        f"RemoteAddress: {resolved}",
+        f"RemotePort: {port}",
+        f"TcpTestSucceeded: {succeeded}" + (f" ({err})" if err else ""),
+        f"PingSucceeded: {ping_ok}",
+        f"RoundTripTime: {elapsed_ms}ms" if succeeded else "RoundTripTime: n/a",
+    ]
+    return "\n".join(lines)
 
 
 # Mapping of standard service ports for native socket scanner

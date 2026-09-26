@@ -76,10 +76,6 @@ class TsharkRunner:
             getattr(self.cfg, "data_dir", ""),
             getattr(self.cfg, "capture_dir", ""),
             getattr(self.cfg, "sandbox_dir", ""),
-            r"C:\Users\KIIT\ollama-wireshark-mcp-v2\data",
-            r"C:\Users\KIIT\Downloads\ollama-wireshark-mcp-v2\data",
-            r"C:\Users\KIIT\ollama-wireshark-mcp-v2\capture",
-            r"C:\Users\KIIT\Downloads\ollama-wireshark-mcp-v2\capture",
             os.path.join(tempfile.gettempdir(), "wireshark_mcp_captures"),
         ]
 
@@ -141,10 +137,6 @@ class TsharkRunner:
             getattr(self.cfg, "capture_dir", ""),
             getattr(self.cfg, "data_dir", ""),
             getattr(self.cfg, "sandbox_dir", ""),
-            r"C:\Users\KIIT\ollama-wireshark-mcp-v2\data",
-            r"C:\Users\KIIT\Downloads\ollama-wireshark-mcp-v2\data",
-            r"C:\Users\KIIT\ollama-wireshark-mcp-v2\capture",
-            r"C:\Users\KIIT\Downloads\ollama-wireshark-mcp-v2\capture",
         ]
         seen_paths = set()
         for d in dirs:
