@@ -228,11 +228,10 @@ Open PowerShell as Administrator and run:
 
 ```powershell
 # 1. Clone repository and navigate to folder
-git clone https://github.com/ScriptKiddie913/NetAgent.git
-cd NetAgent
+cd C:\Users\KIIT\ollama-wireshark-mcp-v2
 
 # 2. Run one-click setup script (auto-detects and installs Wireshark, Nmap, dependencies & registers global command)
-python setup_netagent.py 
+python setup_netagent.py --api-key YOUR_SARVAM_API_KEY --telegram-token YOUR_BOT_TOKEN --telegram-chat-id YOUR_CHAT_ID --virustotal-key YOUR_VT_KEY
 
 # 3. Launch NetAgent from ANY PowerShell window
 netagent
@@ -246,15 +245,17 @@ Open a terminal and run:
 
 ```bash
 # 1. Clone repository and navigate to folder
-git clone https://github.com/ScriptKiddie913/NetAgent.git
-cd NetAgent
+cd ~/ollama-wireshark-mcp-v2
 
 # 2. Create virtual environment and run setup
 python3 -m venv venv
 source venv/bin/activate
-python3 setup_netagent.py 
+python3 setup_netagent.py --api-key YOUR_SARVAM_API_KEY --telegram-token YOUR_BOT_TOKEN --telegram-chat-id YOUR_CHAT_ID --virustotal-key YOUR_VT_KEY
 
-# 3. Launch NetAgent
+# 3. Create global symlink (optional)
+sudo ln -sf $(pwd)/venv/bin/netagent /usr/local/bin/netagent
+
+# 4. Launch NetAgent
 netagent
 ```
 
@@ -420,6 +421,38 @@ Use slash commands inside the interactive `netagent` chat:
 | `/help` | `/help` | Display interactive command and tool reference manual |
 
 ---
+
+## ⚡ Directory Structure
+
+```text
+ollama-wireshark-mcp-v2/
+├── capture/                  # Project-level packet capture storage
+│   ├── .authorized           # Pre-authorized capture token
+│   └── *.pcap                # Live captures and ring buffers
+├── data/                     # Analytical output & persistent storage
+│   ├── reports/              # Generated markdown threat reports
+│   ├── sandbox/              # Quarantined external pcaps
+│   ├── scans/                # Host and port scan ledger
+│   ├── sessions/             # Saved chat sessions and context
+│   ├── memory/               # Long-term network memory ledger
+│   ├── extracted/            # HTTP objects, TLS certs, payload files
+│   └── monitors/             # Detached background subagent registry
+├── wireshark_mcp/            # Core NetAgent package
+│   ├── cli.py                # Command-line interface and chat runner
+│   ├── server.py             # MCP server with 30+ tshark analysis tools
+│   ├── agents.py             # Multi-agent orchestrator & supervisor
+│   ├── virustotal.py         # VirusTotal API v3 threat intelligence
+│   ├── telegram.py           # 2-way Telegram BotFather integration
+│   ├── scanner.py            # Nmap & socket port auditing engine
+│   ├── memory.py             # Persistent memory management
+│   ├── session.py            # Session serialization & restoration
+│   ├── sandbox.py            # Quarantine sandbox staging
+│   └── config.py             # Paths, models, and security configuration
+├── config.yaml               # Active workspace configuration
+├── pyproject.toml            # Project packaging specification
+├── requirements.txt          # Python dependencies
+└── setup_netagent.py         # One-click installer & dependency resolver
+```
 
 ---
 
