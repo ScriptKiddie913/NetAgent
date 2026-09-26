@@ -57,16 +57,105 @@ def run_cmd(cmd: list[str], desc: str) -> bool:
         return False
 
 
+def _run_system_installer(cmd: list[str], desc: str, env: dict | None = None) -> bool:
+    print(f"[*] {desc}...")
+    try:
+        # Check if sudo is usable
+        res = subprocess.run(cmd, env=env, capture_output=False, text=True)
+        return res.returncode == 0
+    except Exception as e:
+        print(f"    [-] Error executing {desc}: {e}")
+        return False
+
+
+def ensure_linux_network_stack() -> bool:
+    """Auto-detects and installs TShark, Wireshark, Nmap, tcpdump and core IP tools on Linux."""
+    tshark_found = bool(shutil.which("tshark"))
+    nmap_found = bool(shutil.which("nmap"))
+    dumpcap_found = bool(shutil.which("dumpcap"))
+
+    if tshark_found and nmap_found and dumpcap_found:
+        print(f"    [+] Found tshark in PATH: {shutil.which('tshark')}")
+        print(f"    [+] Found nmap in PATH: {shutil.which('nmap')}")
+        return True
+
+    print("    [!] Missing network forensic / scanning tools on Linux:")
+    if not tshark_found:
+        print("        • tshark (CLI packet dissection engine) - MISSING")
+    if not nmap_found:
+        print("        • nmap (IP & port discovery scanner) - MISSING")
+    if not dumpcap_found:
+        print("        • dumpcap (packet capture engine) - MISSING")
+
+    print("    [*] Automatically pulling and installing complete network forensic & IP stack...")
+
+    # Debian / Ubuntu / Kali / Mint / PopOS (APT)
+    if shutil.which("apt-get"):
+        print("    [*] Configuring debconf for automated non-interactive packet capture permissions...")
+        try:
+            p = subprocess.Popen(["sudo", "-E", "debconf-set-selections"], stdin=subprocess.PIPE, text=True)
+            p.communicate(input="wireshark-common wireshark-common/install-setuid boolean true\n")
+        except Exception:
+            pass
+
+        apt_env = os.environ.copy()
+        apt_env["DEBIAN_FRONTEND"] = "noninteractive"
+        _run_system_installer(["sudo", "-E", "apt-get", "update", "-y"], "Updating APT package repository", env=apt_env)
+        pkgs = ["tshark", "wireshark", "dumpcap", "nmap", "tcpdump", "net-tools", "iproute2", "traceroute", "libpcap-dev"]
+        ok = _run_system_installer(["sudo", "-E", "apt-get", "install", "-y"] + pkgs, "Installing TShark, Wireshark, Nmap, tcpdump & IP tools via apt-get", env=apt_env)
+
+        # Grant non-root packet capture rights
+        user = os.environ.get("USER") or os.environ.get("LOGNAME")
+        if user:
+            subprocess.run(["sudo", "usermod", "-aG", "wireshark", user], capture_output=True)
+        dumpcap_path = shutil.which("dumpcap") or "/usr/bin/dumpcap"
+        if os.path.isfile(dumpcap_path):
+            subprocess.run(["sudo", "chmod", "+x", dumpcap_path], capture_output=True)
+            subprocess.run(["sudo", "setcap", "CAP_NET_RAW+eip CAP_NET_ADMIN+eip", dumpcap_path], capture_output=True)
+            print("    [+] Configured non-root packet capture capabilities on dumpcap.")
+
+        return bool(shutil.which("tshark"))
+
+    # Fedora / RHEL / CentOS (DNF / YUM)
+    elif shutil.which("dnf"):
+        pkgs = ["wireshark", "wireshark-cli", "tshark", "nmap", "tcpdump", "net-tools", "iproute", "traceroute", "libpcap-devel"]
+        _run_system_installer(["sudo", "dnf", "install", "-y"] + pkgs, "Installing network tools via dnf")
+        user = os.environ.get("USER") or os.environ.get("LOGNAME")
+        if user:
+            subprocess.run(["sudo", "usermod", "-aG", "wireshark", user], capture_output=True)
+        return bool(shutil.which("tshark"))
+
+    # Arch Linux / Manjaro (Pacman)
+    elif shutil.which("pacman"):
+        pkgs = ["wireshark-cli", "wireshark-qt", "nmap", "tcpdump", "net-tools", "iproute2", "traceroute", "libpcap"]
+        _run_system_installer(["sudo", "pacman", "-S", "--noconfirm"] + pkgs, "Installing network tools via pacman")
+        user = os.environ.get("USER") or os.environ.get("LOGNAME")
+        if user:
+            subprocess.run(["sudo", "usermod", "-aG", "wireshark", user], capture_output=True)
+        return bool(shutil.which("tshark"))
+
+    # openSUSE (Zypper)
+    elif shutil.which("zypper"):
+        pkgs = ["wireshark", "tshark", "nmap", "tcpdump", "net-tools", "iproute2", "traceroute", "libpcap-devel"]
+        _run_system_installer(["sudo", "zypper", "--non-interactive", "install"] + pkgs, "Installing network tools via zypper")
+        return bool(shutil.which("tshark"))
+
+    return False
+
+
 def ensure_wireshark_installed() -> bool:
     """Detects and installs Wireshark / TShark if not present on system."""
     import urllib.request
-    
-    # 1. Check if already discoverable in PATH
-    for bin_name in ["tshark", "wireshark", "dumpcap"]:
-        found = shutil.which(bin_name)
-        if found:
-            print(f"    [+] Found {bin_name} in PATH: {found}")
-            return True
+
+    # On Linux, dispatch to comprehensive installer
+    if sys.platform.startswith("linux"):
+        return ensure_linux_network_stack()
+
+    # 1. Check if tshark is directly discoverable in PATH
+    tshark_found = shutil.which("tshark")
+    if tshark_found:
+        print(f"    [+] Found tshark in PATH: {tshark_found}")
+        return True
 
     # 2. On Windows, check standard installation directories
     if sys.platform == "win32":
@@ -78,9 +167,7 @@ def ensure_wireshark_installed() -> bool:
             tshark_exe = wdir / "tshark.exe"
             if tshark_exe.is_file():
                 print(f"    [+] Found Wireshark at {wdir}. Registering in PATH...")
-                # Add to current process PATH
                 os.environ["PATH"] = str(wdir) + os.pathsep + os.environ.get("PATH", "")
-                # Add to persistent user PATH via PowerShell
                 try:
                     ps_cmd = (
                         f"$cur = [System.Environment]::GetEnvironmentVariable('Path', 'User'); "
@@ -142,29 +229,6 @@ def ensure_wireshark_installed() -> bool:
         except Exception as e:
             print(f"    [-] Direct installer pull error: {e}")
 
-    # Linux automated package installation
-    elif sys.platform.startswith("linux"):
-        print("    [-] Wireshark / TShark not detected on system.")
-        print("    [*] Pulling and installing Wireshark via system package manager...")
-        if shutil.which("apt-get"):
-            cmd = ["sudo", "DEBIAN_FRONTEND=noninteractive", "apt-get", "update", "-y"]
-            subprocess.run(cmd, capture_output=True)
-            cmd_inst = ["sudo", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "tshark", "wireshark", "libpcap-dev"]
-            res = subprocess.run(cmd_inst, capture_output=True, text=True)
-            if res.returncode == 0:
-                print("    [+] TShark & Wireshark installed via apt-get.")
-                return True
-        elif shutil.which("dnf"):
-            res = subprocess.run(["sudo", "dnf", "install", "-y", "wireshark", "tshark", "libpcap"], capture_output=True, text=True)
-            if res.returncode == 0:
-                print("    [+] Wireshark installed via dnf.")
-                return True
-        elif shutil.which("pacman"):
-            res = subprocess.run(["sudo", "pacman", "-S", "--noconfirm", "wireshark-cli"], capture_output=True, text=True)
-            if res.returncode == 0:
-                print("    [+] Wireshark installed via pacman.")
-                return True
-
     # macOS automated installation
     elif sys.platform == "darwin":
         if shutil.which("brew"):
@@ -180,6 +244,9 @@ def ensure_nmap_installed() -> bool:
     if shutil.which("nmap"):
         print("    [+] Found nmap in PATH.")
         return True
+
+    if sys.platform.startswith("linux"):
+        return ensure_linux_network_stack()
 
     if sys.platform == "win32":
         nmap_dirs = [
@@ -202,13 +269,6 @@ def ensure_nmap_installed() -> bool:
             if res.returncode == 0:
                 print("    [+] Nmap installed successfully.")
                 return True
-    elif sys.platform.startswith("linux"):
-        if shutil.which("apt-get"):
-            subprocess.run(["sudo", "apt-get", "install", "-y", "nmap"], capture_output=True)
-            return bool(shutil.which("nmap"))
-        elif shutil.which("dnf"):
-            subprocess.run(["sudo", "dnf", "install", "-y", "nmap"], capture_output=True)
-            return bool(shutil.which("nmap"))
 
     print("    [i] Nmap raw binary not installed; NetAgent high-performance socket scanner active as fallback.")
     return False
@@ -390,19 +450,29 @@ virustotal:
 def install_dependencies():
     print("\n--- 2. Installing NetAgent Package & Dependencies ---")
     python_exe = sys.executable
-    run_cmd([python_exe, "-m", "pip", "install", "--upgrade", "pip"], "Upgrading pip")
-    run_cmd([python_exe, "-m", "pip", "install", "--no-build-isolation", "-e", "."], "Installing NetAgent in editable mode")
+    run_cmd([python_exe, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel", "psutil"], "Upgrading pip, setuptools, wheel & psutil")
+    run_cmd([python_exe, "-m", "pip", "install", "-e", "."], "Installing NetAgent in editable mode")
 
 
 def configure_powershell_path():
-    print("\n--- 3. Configuring Global PowerShell 'netagent' Command ---")
-    python_dir = os.path.dirname(sys.executable)
-    scripts_dir = os.path.join(python_dir, "Scripts")
+    print("\n--- 3. Configuring Global 'netagent' Command & PATH ---")
+    import sysconfig
+    scripts_dir = sysconfig.get_path("scripts")
     if not os.path.isdir(scripts_dir):
-        # Alternative virtualenv layout
-        scripts_dir = os.path.join(os.path.dirname(python_dir), "Scripts")
+        python_dir = os.path.dirname(sys.executable)
+        candidates = [
+            os.path.join(python_dir, "Scripts"),
+            os.path.join(python_dir, "bin"),
+            python_dir,
+            os.path.join(os.path.dirname(python_dir), "Scripts"),
+            os.path.join(os.path.dirname(python_dir), "bin"),
+        ]
+        for c in candidates:
+            if os.path.isdir(c):
+                scripts_dir = c
+                break
 
-    print(f"[*] Python Scripts directory: {scripts_dir}")
+    print(f"[*] Python Scripts/bin directory: {scripts_dir}")
 
     # Check if scripts_dir is in PATH
     path_env = os.environ.get("PATH", "")
@@ -419,14 +489,17 @@ def configure_powershell_path():
                 print(f"    [+] Added {scripts_dir} to User PATH in Windows registry.")
             except Exception as e:
                 print(f"    [-] Could not update registry PATH: {e}")
+        else:
+            print(f"    [!] Note: Ensure {scripts_dir} is in your PATH (e.g., in ~/.bashrc or ~/.zshrc).")
     else:
-        print("    [+] Python Scripts directory is already in PATH.")
+        print("    [+] Python Scripts/bin directory is already in PATH.")
 
-    # Also create netagent.cmd and netagent.ps1 in ~/.netagent/bin
+    # Also create netagent shims in ~/.netagent/bin (cross-platform)
     user_bin = Path.home() / ".netagent" / "bin"
     user_bin.mkdir(parents=True, exist_ok=True)
     cmd_script = user_bin / "netagent.cmd"
     ps_script = user_bin / "netagent.ps1"
+    sh_script = user_bin / "netagent"
 
     python_run = sys.executable
     with open(cmd_script, "w", encoding="utf-8") as fh:
@@ -434,6 +507,13 @@ def configure_powershell_path():
 
     with open(ps_script, "w", encoding="utf-8") as fh:
         fh.write(f'& "{python_run}" -m wireshark_mcp.cli $args\n')
+
+    with open(sh_script, "w", encoding="utf-8") as fh:
+        fh.write(f'#!/usr/bin/env bash\nexec "{python_run}" -m wireshark_mcp.cli "$@"\n')
+    try:
+        sh_script.chmod(0o755)
+    except Exception:
+        pass
 
     print(f"    [+] Created global execution shims at {user_bin}")
 
@@ -468,10 +548,11 @@ def initialize_directories_and_auth():
     base_dir = os.path.join(tempfile.gettempdir(), "wireshark_mcp_captures")
     try:
         os.makedirs(base_dir, exist_ok=True)
+        os.makedirs(os.path.join(base_dir, "memory"), exist_ok=True)
     except Exception:
         pass
 
-    # Auto-authorize capture marker in both locations
+    # Auto-authorize capture marker in all locations
     for d in [DEFAULT_CAPTURE_DIR, DEFAULT_DATA_DIR, base_dir]:
         try:
             auth_marker = os.path.join(d, ".authorized")
@@ -482,28 +563,33 @@ def initialize_directories_and_auth():
     print("    [+] Live packet capture permission pre-authorized.")
 
     # Pre-populate long-term memory with baseline network knowledge
-    mem_file = os.path.join(base_dir, "memory", "long_term_memory.json")
-    if not os.path.isfile(mem_file):
-        seed_memories = [
-            {
-                "entry_id": "mem_seed01",
-                "category": "topology",
-                "content": "Standard private subnets: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16. Multicast: 224.0.0.0/4.",
-                "created_at": "2026-01-01 00:00:00",
-                "source": "system",
-            },
-            {
-                "entry_id": "mem_seed02",
-                "category": "preference",
-                "content": "Default live capture duration is 15 seconds. Use tshark or PowerShell for interface enumeration.",
-                "created_at": "2026-01-01 00:00:00",
-                "source": "system",
-            }
-        ]
-        import json
-        with open(mem_file, "w", encoding="utf-8") as fh:
-            json.dump(seed_memories, fh, indent=2)
-        print("    [+] Long-term network memory seeded with baseline topology rules.")
+    seed_memories = [
+        {
+            "entry_id": "mem_seed01",
+            "category": "topology",
+            "content": "Standard private subnets: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16. Multicast: 224.0.0.0/4.",
+            "created_at": "2026-01-01 00:00:00",
+            "source": "system",
+        },
+        {
+            "entry_id": "mem_seed02",
+            "category": "preference",
+            "content": "Default live capture duration is 15 seconds. Use tshark or PowerShell for interface enumeration.",
+            "created_at": "2026-01-01 00:00:00",
+            "source": "system",
+        }
+    ]
+    import json
+    for target_dir in [os.path.join(DEFAULT_DATA_DIR, "memory"), os.path.join(base_dir, "memory")]:
+        try:
+            os.makedirs(target_dir, exist_ok=True)
+            mem_file = os.path.join(target_dir, "long_term_memory.json")
+            if not os.path.isfile(mem_file):
+                with open(mem_file, "w", encoding="utf-8") as fh:
+                    json.dump(seed_memories, fh, indent=2)
+        except Exception:
+            pass
+    print("    [+] Long-term network memory seeded with baseline topology rules.")
 
 
 def verify_installation():

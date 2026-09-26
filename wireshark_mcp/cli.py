@@ -1262,20 +1262,43 @@ def doctor(ctx):
         table.add_row("tshark (CLI)", f"[red]NOT FOUND[/red] — set tshark_path in config or add to PATH")
 
     # 2. Desktop Wireshark GUI
-    gui_path = getattr(cfg, "wireshark_gui_path", r"C:\Program Files\Wireshark\Wireshark.exe")
+    gui_path = getattr(cfg, "wireshark_gui_path", "wireshark")
     resolved_gui = shutil.which(gui_path) or (gui_path if os.path.isfile(gui_path) else None)
     if resolved_gui:
         table.add_row("Desktop Wireshark", f"[green]OK[/green] — {resolved_gui}")
     else:
         table.add_row("Desktop Wireshark", "[yellow]NOT FOUND[/yellow] (optional for visual inspection)")
 
-    # 3. PowerShell Network Tools
+    # 3. Nmap Network Scanner
+    nmap_path = shutil.which("nmap")
+    if nmap_path:
+        table.add_row("Nmap Scanner", f"[green]OK[/green] — {nmap_path}")
+    else:
+        table.add_row("Nmap Scanner", "[yellow]NOT FOUND[/yellow] (falling back to high-performance socket scanner)")
+
+    # 4. OS Network Inspection Tools & Subagent Engine (psutil)
+    if sys.platform == "win32":
+        try:
+            ps_out = subprocess.run(["powershell", "-NoProfile", "-Command", "Get-Command Get-NetAdapter, Get-NetTCPConnection, Test-NetConnection | Measure-Object | Select-Object -ExpandProperty Count"], capture_output=True, text=True, timeout=5)
+            count = ps_out.stdout.strip()
+            table.add_row("PowerShell Tools", f"[green]OK[/green] — Get-NetAdapter, Get-NetTCPConnection, Test-NetConnection ({count} found)")
+        except Exception:
+            table.add_row("PowerShell Tools", "[yellow]Available via powershell.exe[/yellow]")
+    else:
+        tools_found = []
+        for t in ["ip", "ss", "netstat", "tcpdump"]:
+            if shutil.which(t):
+                tools_found.append(t)
+        if tools_found:
+            table.add_row("Linux Net Tools", f"[green]OK[/green] — {', '.join(tools_found)}")
+        else:
+            table.add_row("Linux Net Tools", "[yellow]Basic tools missing (iproute2/net-tools)[/yellow]")
+
     try:
-        ps_out = subprocess.run(["powershell", "-NoProfile", "-Command", "Get-Command Get-NetAdapter, Get-NetTCPConnection, Test-NetConnection | Measure-Object | Select-Object -ExpandProperty Count"], capture_output=True, text=True, timeout=5)
-        count = ps_out.stdout.strip()
-        table.add_row("PowerShell Tools", f"[green]OK[/green] — Get-NetAdapter, Get-NetTCPConnection, Test-NetConnection ({count} found)")
-    except Exception:
-        table.add_row("PowerShell Tools", "[yellow]Available via powershell.exe[/yellow]")
+        import psutil  # type: ignore
+        table.add_row("Process Monitor (psutil)", f"[green]OK[/green] — v{psutil.__version__}")
+    except ImportError:
+        table.add_row("Process Monitor (psutil)", "[red]MISSING[/red] — run `pip install psutil` for background monitors")
 
     # 4. Configured provider
     active_p = cfg.provider

@@ -239,25 +239,168 @@ netagent
 
 ---
 
-### Linux (Ubuntu / Debian / Fedora / Arch)
+### Linux (Ubuntu / Debian / Kali / Fedora / Arch / openSUSE)
 
-Open a terminal and run:
+NetAgent fully supports Linux environments for autonomous packet captures, live interface inspection, and threat hunting. Follow either the **One-Click Automated Setup** or the **Manual Step-by-Step Installation**.
+
+#### Option A: One-Click Automated Setup (Recommended)
+
+The included [setup_netagent.py](file:///c:/Users/KIIT/ollama-wireshark-mcp-v2/setup_netagent.py) installer automatically detects your Linux distribution, installs missing tools (`tshark`, `wireshark`, `dumpcap`, `nmap`, `tcpdump`, `iproute2`, `psutil`), configures non-root packet capture permissions, sets up long-term memory, and registers global executable shims:
 
 ```bash
-# 1. Clone repository and navigate to folder
-cd ~/ollama-wireshark-mcp-v2
+# 1. Clone repository and navigate to directory
+git clone https://github.com/your-username/NetAgent.git ~/NetAgent
+cd ~/NetAgent
 
-# 2. Create virtual environment and run setup
+# 2. Create and activate a Python virtual environment (Python 3.10+)
 python3 -m venv venv
 source venv/bin/activate
-python3 setup_netagent.py --api-key YOUR_SARVAM_API_KEY --telegram-token YOUR_BOT_TOKEN --telegram-chat-id YOUR_CHAT_ID --virustotal-key YOUR_VT_KEY
 
-# 3. Create global symlink (optional)
-sudo ln -sf $(pwd)/venv/bin/netagent /usr/local/bin/netagent
+# 3. Ensure pip build tools and psutil are up to date
+pip install --upgrade pip setuptools wheel psutil
 
-# 4. Launch NetAgent
-netagent
+# 4. Run automated one-click setup
+python3 setup_netagent.py
+
+# Optional: Provide API keys directly via flags for unattended setup
+# python3 setup_netagent.py \
+#   --api-key YOUR_SARVAM_API_KEY \
+#   --telegram-token YOUR_BOT_TOKEN \
+#   --telegram-chat-id YOUR_CHAT_ID \
+#   --virustotal-key YOUR_VT_KEY
 ```
+
+---
+
+#### Option B: Manual Step-by-Step Linux Installation
+
+If you prefer to configure system packages and dependencies manually:
+
+##### 1. Install System Network & IP Inspection Tools
+
+Choose the command matching your Linux distribution:
+
+* **Ubuntu / Debian / Kali Linux / Linux Mint / Pop!_OS:**
+  ```bash
+  # Pre-seed debconf so tshark installs non-interactively without blocking prompts
+  echo "wireshark-common wireshark-common/install-setuid boolean true" | sudo debconf-set-selections
+
+  sudo apt-get update -y
+  sudo apt-get install -y tshark wireshark dumpcap nmap tcpdump net-tools iproute2 traceroute libpcap-dev
+  ```
+
+* **Fedora / RHEL / CentOS:**
+  ```bash
+  sudo dnf install -y wireshark wireshark-cli tshark nmap tcpdump net-tools iproute traceroute libpcap-devel
+  ```
+
+* **Arch Linux / Manjaro:**
+  ```bash
+  sudo pacman -S --noconfirm wireshark-cli wireshark-qt nmap tcpdump net-tools iproute2 traceroute libpcap
+  ```
+
+* **openSUSE:**
+  ```bash
+  sudo zypper --non-interactive install wireshark tshark nmap tcpdump net-tools iproute2 traceroute libpcap-devel
+  ```
+
+##### 2. Configure Non-Root Live Packet Capture Permissions
+
+> [!IMPORTANT]
+> Running NetAgent or packet captures under `sudo` is **strongly discouraged** as it breaks Python virtual environments and creates security risks. Grant your Linux user non-root packet capture capabilities via Linux file capabilities on `dumpcap`:
+
+```bash
+# 1. Add current user to wireshark group
+sudo usermod -aG wireshark $USER
+
+# 2. Set Linux capabilities on dumpcap (allows raw socket capture without root)
+sudo chmod +x /usr/bin/dumpcap
+sudo setcap 'CAP_NET_RAW+eip CAP_NET_ADMIN+eip' /usr/bin/dumpcap
+
+# 3. Apply group membership immediately to current shell session (without rebooting)
+newgrp wireshark
+```
+
+##### 3. Install NetAgent Python Package
+
+```bash
+# In your activated virtual environment:
+pip install --upgrade pip setuptools wheel psutil
+pip install -e .
+```
+
+##### 4. Authorize Packet Capture & Verify Environment
+
+```bash
+# Pre-authorize packet capture in NetAgent data directory
+mkdir -p data capture
+touch capture/.authorized data/.authorized
+
+# Run full diagnostic check
+netagent doctor
+```
+
+---
+
+#### Setting Up Global Linux Command (`netagent`)
+
+To run `netagent` from any terminal or working directory on Linux:
+
+**Option 1: Add NetAgent User Bin to PATH (Default)**
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+echo 'export PATH="$HOME/.netagent/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Option 2: Create System Symlink**
+```bash
+sudo ln -sf $(pwd)/venv/bin/netagent /usr/local/bin/netagent
+```
+
+You can now start NetAgent anywhere:
+```bash
+netagent
+# or
+netagent chat
+```
+
+---
+
+#### Linux Troubleshooting & Common Issues
+
+* **`tshark: Permission denied` or `There are no interfaces on which a capture can be done`:**
+  Your user lacks packet capture permissions. Run:
+  ```bash
+  sudo usermod -aG wireshark $USER
+  sudo setcap 'CAP_NET_RAW+eip CAP_NET_ADMIN+eip' /usr/bin/dumpcap
+  newgrp wireshark
+  ```
+  Then test with: `tshark -D`
+
+* **`ModuleNotFoundError: No module named 'psutil'`:**
+  Install `psutil` inside your active virtual environment:
+  ```bash
+  pip install --upgrade psutil
+  ```
+
+* **`BackendUnavailable: Cannot import 'setuptools.build_meta'` during pip install:**
+  In modern Python (Python 3.12+ / 3.14 on Linux), fresh virtual environments do not bundle build tools. Run:
+  ```bash
+  pip install --upgrade pip setuptools wheel
+  pip install -e .
+  ```
+
+* **Headless Linux Server / SSH Sessions:**
+  NetAgent's continuous background monitoring subagents run completely detached as background daemons:
+  ```bash
+  # Spawn 24/7 background monitor daemon on eth0 (survives SSH disconnects)
+  netagent monitor start eth0
+
+  # Check stats and alerts at any time
+  netagent monitor list
+  netagent monitor stats mon_xxxxxx
+  ```
 
 ---
 
